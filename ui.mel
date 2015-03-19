@@ -4,6 +4,27 @@
 	global int $numProfiles;
 	global float $baseCentroid[];
 	
+	global proc createCameraUI () {
+		string $window = `window -title "Build It!"
+       -iconName "Build It"
+       -widthHeight 800 900`;
+		columnLayout -adjustableColumn true;
+       //button -label "Do Nothing";
+       //button -label "Close" -command ("deleteUI -window " + $window);
+	   paneLayout -cn "vertical2" -ps 1 50 50 -ps 2 50 50 -height 800;// Attach Panel to window
+		   string $floorPlanPanel = `modelPanel "floorPlan"`;
+		   string $profilePanel = `modelPanel "profile"`;
+		   string $topPanel = `getPanel -withLabel "Top View"`;
+		   string $frontPanel = `getPanel -withLabel "Front View"`;
+		   string $topCam = `modelPanel -query -camera $topPanel`;
+		   string $frontCam = `modelPanel -query -camera $frontPanel`;
+			//modelPanel -edit -camera $floorPlanPanel $topCam ;
+			modelPanel -edit -copy $topPanel $floorPlanPanel ;  
+			modelPanel -edit -copy $frontPanel $profilePanel;
+			setParent ..;
+			showWindow $window;
+	}
+	
 	global proc createCurveUI () {
 		menu -parent MayaWindow -label "CURVE" -tearOff true "CurveMenu";
 
