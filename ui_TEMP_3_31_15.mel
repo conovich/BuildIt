@@ -1,0 +1,970 @@
+{
+	global string $baseCurve;
+	global string $profileCurves[];
+	global int $numProfiles;
+	global float $baseCentroid[];
+	global float $minPointHeightDiff;
+	global int $doProfileCurvesStartFromTop[]; //0 indicates bottom, 1 indicates top
+	global int $numPointsPerCurve[];
+	global int $maxNumPtsInAProfile;
+	global vector $allProfilePoints[];
+	global vector $intersectionStartPoints[];
+	global vector $intersectionEndPoints[];
+	global string $curveCommand;
+	global float $averageProfPointHeights[]; //for each level!
+	
+	global proc createCurveUI () {
+		menu -parent MayaWindow -label "CURVE" -tearOff true "CurveMenu";
+
+		menuItem -label "Make Base Curve" -command "makeBaseCurve" -parent CurveMenu "baseCurveItem";
+		menuItem -label "Save Base Curve" -command "saveBaseCurve" -parent CurveMenu "baseSaveItem";
+		menuItem -label "Make Profile Curve" -command "makeProfileCurve" -parent CurveMenu "profileCurveItem";
+		menuItem -label "Save Profile Curve" -command "saveProfileCurves" -parent CurveMenu "profileSaveItem";
+		menuItem -label "Extrude From Selected" -command "extrudeFromCurve" -parent CurveMenu "extrudeSelectedItem";
+
+		menuItem -label "Extrude Building" -command "extrudeBuilding" -parent CurveMenu "extrudeItem";
+
+	}
+
+	global proc makeBaseCurve () {
+		selectCurveTool();
+
+	}
+
+	global proc saveBaseCurve () {
+		string $selected[] = `ls -sl`;
+		string $selectedCurve = $selected[0];
+		
+		$baseCurve = $selectedCurve;
+
+		print "saved base curve!";
+
+	}
+
+	global proc makeProfileCurve () {
+		selectCurveTool();
+	}
+
+	global proc saveProfileCurves () {
+		print "gonna save profile curve!";
+		string $selected[] = `ls -sl`;
+
+		$profileCurves[$numProfiles] = $selected[0];
+
+		$numProfiles = $numProfiles + 1;
+
+		print($profileCurves[0]);
+
+		print "saved profile curve!";
+	}
+
+	global proc selectCurveTool () {
+
+		CVCurveTool;
+		curveCVToolScript 4;
+		// Result: curveContextCV //
+		curveCVValues curveContextCV;
+		toolPropertyShow;
+		changeToolIcon;
+		autoUpdateAttrEd;
+		updateAnimLayerEditor("AnimLayerTab");
+		statusLineUpdateInputField;
+
+		curveCVValues curveContextCV;
+		curveCVCtx -e -d 1 -bez 0 `currentCtx`;
+
+
+
+		//curveCVValues curveContextCV;
+		//toolPropertyShow;
+		//changeToolIcon;
+		//autoUpdateAttrEd;
+		//updateAnimLayerEditor("AnimLayerTab");
+		//statusLineUpdateInputField;
+		//curveCVCtx -e -d 1 -bez 0 `currentCtx`;
+	
+		//curveCVValues curveContextCV;
+		//toolPropertyShow;
+	}
+
+	global proc float getDistance(float $p1[], float $p2[]){
+
+		float $diffVec[] = {$p1[0] - $p2[0], $p1[1] - $p2[1], $p1[2] - $p2[2]};
+		float $distance = sqrt (($diffVec[0] * $diffVec[0]) + ($diffVec[1] * $diffVec[1]) + ($diffVec[2] * $diffVec[2]));
+		return $distance;
+	}
+ 
+
+	global proc extrudeBuilding (){
+		if ((size($profileCurves) > 0) && ($baseCurve != "")){
+
+			int $spans1 = `getAttr $baseCurve.spans`;
+			//print("\nspans");
+			//print($spans1);
+			int $degree1 = `getAttr $baseCurve.degree`;
+			//print("\ndeg");
+			//print($degree1);
+			int $numBasePoints = $spans1 + $degree1;
+			//print("\nbase curve");
+			//print($baseCurve);
+
+			//print("\norig num base points");
+			//print($numBasePoints);
+
+
+			//count the TOTAL number of profile points, across all profile curves
+			$maxNumPtsInAProfile = 0;
+			int $numTotalProfilePoints = 0;
+			for ($i = 0; $i < size($profileCurves); ++$i){
+				string $currentCurve = $profileCurves[$i];
+
+				int $spans = `getAttr $currentCurve.spans`;
+				int $degree = `getAttr $currentCurve.degree`;
+
+				$numTotalProfilePoints += $spans + $degree;
+
+				print("\nTOTAL NUM PROFILE POINTS: ");
+				print($numTotalProfilePoints);
+
+				//get the max number of points in a profile, for use in extrusion
+				if($spans + $degree > $maxNumPtsInAProfile){
+					$maxNumPtsInAProfile = $spans + $degree;
+				}
+
+				$numPointsPerCurve[$i] = $spans + $degree;
+
+			}
+
+
+			if($numBasePoints > 2){
+
+				alignProfileCurves($numBasePoints);
+
+				calculateAverageProfPointHeights();
+
+				int $numProfileCurves = size($profileCurves);
+
+
+
+				string $buildingCurves[];
+
+				int $currPointIndex = 0;
+				//for each point in the biggest profile curve... there should be a new 'base curve'
+				for($currPointIndex = 0; $currPointIndex < $maxNumPtsInAProfile; ++$currPointIndex){
+
+
+					int $buildingCurvePointNum = 0;
+
+					//reset curveCommand string
+					$curveCommand = "curve -d 1";
+					string $pFlag = "-p";
+					string $kFlag = "-k";
+					string $nameFlag = "-name";
+					string $space = " ";
+
+					string $nextCurveName = "buildingCurve" + $currPointIndex;
+
+					print("\ncurve command reset : ");
+					print($curveCommand);
+
+					print("\nnum base points: ");
+					print($numBasePoints);
+
+					int $basePointIteration = 0;
+
+					for($basePointIteration = 0; $basePointIteration < $numBasePoints; ++$basePointIteration){
+						float $currentBasePoint[] = `getAttr ($baseCurve + ".cv[" + $basePointIteration +"]")`;
+
+						print("\nbase point iteration: ");
+						print($basePointIteration);
+
+						//FOR SOME REASON THE CURVE ISN'T MOVING DOWN BEFORE HERE...
+						//float $height = $currentProfPoint[1] - $minPointHeightDiff; //TODO: DEAL WITH THIS FOR ALL CURVES
+						float $height = $averageProfPointHeights[$currPointIndex];//TODO: DEAL WITH THIS FOR ALL CURVES
+
+
+						$curveCommand = $curveCommand + $space + $pFlag + $space + $currentBasePoint[0] + $space + $height + $space + $currentBasePoint[2];
+
+						$buildingCurvePointNum++;
+
+						if($basePointIteration < $numBasePoints - 1){
+
+							int $basePointIterationNext = $basePointIteration+1;
+							float $nextBasePoint[] = `getAttr ($baseCurve + ".cv[" + $basePointIterationNext +"]")`;
+
+
+
+
+							//go through current level of each profile curve
+							for($i = 0; $i < $numProfileCurves; ++$i){
+
+								print("\nnum profile curves: ");
+								print($numProfileCurves);
+
+								string $currentProfCurve = $profileCurves[$i];
+
+								if($doProfileCurvesStartFromTop[$i] == 0){ //curve starts at bottom
+									print("\n curve starts at bottom!");
+
+									if($numPointsPerCurve[$i] > $currPointIndex){ //if this curve has more points than the index we're at
+										//check if current point intersects the base curve currently
+										
+										float $currentProfPoint[] = `getAttr ($currentProfCurve + ".cv[" + $currPointIndex +"]")`;
+
+										vector $currIntersectionP1 = $intersectionStartPoints[$i];
+										vector $currIntersectionP2 = $intersectionEndPoints[$i];
+
+										if( insertCurveIntoBase($currentBasePoint, $nextBasePoint, $currIntersectionP1, $currIntersectionP2, $currentProfPoint) == 1){
+											$buildingCurvePointNum++;
+										}
+
+									}
+									else{
+
+										//use the highest curve point of the curve as the current curve, even if it's a duplicate
+										int $lastCurvePointIndex = $numPointsPerCurve[$i] - 1;
+										float $currentProfPoint[] = `getAttr ($currentProfCurve + ".cv[" + $lastCurvePointIndex +"]")`;
+
+
+										vector $currIntersectionP1 = $intersectionStartPoints[$i];
+										vector $currIntersectionP2 = $intersectionEndPoints[$i];
+
+										if( insertCurveIntoBase($currentBasePoint, $nextBasePoint, $currIntersectionP1, $currIntersectionP2, $currentProfPoint) == 1 ){
+											$buildingCurvePointNum++;
+										}
+									}
+
+								}
+								else if($doProfileCurvesStartFromTop[$i] == 1){ //curve starts at top
+									print("\n curve starts at top!");
+									if($numPointsPerCurve[$i] > $currPointIndex){ //if this curve has more points than the index we're at
+										int $lastCurvePointIndex = $numPointsPerCurve[$i] - 1 - $currPointIndex;
+										float $currentProfPoint[] = `getAttr ($currentProfCurve + ".cv[" + $lastCurvePointIndex +"]")`;
+
+										vector $currIntersectionP1 = $intersectionStartPoints[$i];
+										vector $currIntersectionP2 = $intersectionEndPoints[$i];
+
+										//vector $currIntersectionP3 = $intersectionStartPoints[$i+1];
+										//vector $currIntersectionP4 = $intersectionEndPoints[$i+1];
+
+										print("\ncurrent index: ");
+										print($i);
+
+										if($i == 2){
+											print("\n num intersection start points!");
+											print(size($intersectionStartPoints));
+
+											print("\n currIntersection P1\n");
+											print($currIntersectionP1.x);
+											print("\n");
+											print($currIntersectionP1.y);
+											print("\n");
+											print($currIntersectionP1.z);
+											print("\n");
+
+											print("\n currIntersection P2\n");
+											print($currIntersectionP2.x);
+											print("\n");
+											print($currIntersectionP2.y);
+											print("\n");
+											print($currIntersectionP2.z);
+											print("\n");
+
+											/*print("\n currIntersection P3\n");
+											print($currIntersectionP3.x);
+											print("\n");
+											print($currIntersectionP3.y);
+											print("\n");
+											print($currIntersectionP3.z);
+											print("\n");
+
+											print("\n currIntersection P4\n");
+											print($currIntersectionP4.x);
+											print("\n");
+											print($currIntersectionP4.y);
+											print("\n");
+											print($currIntersectionP4.z);
+											print("\n");*/
+										}
+
+										if( insertCurveIntoBase($currentBasePoint, $nextBasePoint, $currIntersectionP1, $currIntersectionP2, $currentProfPoint) == 1 ){
+											$buildingCurvePointNum++;
+										}
+									}
+									else{
+										int $lastCurvePointIndex = 0;
+										float $currentProfPoint[] = `getAttr ($currentProfCurve + ".cv[" + $lastCurvePointIndex +"]")`;
+
+										vector $currIntersectionP1 = $intersectionStartPoints[$i];
+										vector $currIntersectionP2 = $intersectionEndPoints[$i];
+
+										if( insertCurveIntoBase($currentBasePoint, $nextBasePoint, $currIntersectionP1, $currIntersectionP2, $currentProfPoint) == 1 ){
+											$buildingCurvePointNum++;
+										}
+									}
+
+
+								}
+
+							}
+
+						}
+
+
+					}
+
+					for($j = 0; $j < $buildingCurvePointNum; ++$j){
+						$curveCommand = $curveCommand + $space + $kFlag + $space + $j;
+					}
+
+					$curveCommand = $curveCommand + $space + $nameFlag + $space + $nextCurveName;
+
+					//create the curve and add it to the buildingCurves array
+					print("\ncurve command eval: ");
+					print($curveCommand);
+					eval ($curveCommand);
+					$buildingCurves[$currPointIndex] = $nextCurveName;
+
+
+				}
+
+				//6. loft!
+				if($maxNumPtsInAProfile > 0){
+					string $firstCurve = $buildingCurves[0];
+					print("\nfirst building curve!");
+					print($firstCurve);
+					closeCurve -ch 1 -ps 1 -rpo 1 -bb 0.5 -bki 0 -p 0.1 $firstCurve; //close the initial curve
+				}
+				for($i = 0; $i < $maxNumPtsInAProfile - 1; ++$i){
+					string $curve1 = $buildingCurves[$i];
+					string $curve2 = $buildingCurves[$i+1];
+					closeCurve -ch 1 -ps 1 -rpo 1 -bb 0.5 -bki 0 -p 0.1 $curve2; //close the second curve
+
+					//loft -ch 1 -u 1 -c 0 -ar 1 -d 3 -ss 1 -rn 0 -po 0 -rsn true $curve1 $curve2; //nurbs
+					loft -ch 1 -u 1 -c 0 -ar 1 -d 3 -ss 1 -rn 0 -po 1 -rsn true $curve1 $curve2; //polygons
+				}
+				
+				/* //DEBUG
+				int $a = 0;
+				for($a = 0; $a < size($intersectionStartPoints); ++$a){
+
+					print("\nintersection starts");
+					print($intersectionStartPoints[$a]);
+					print("\nintersection ends");
+					print($intersectionEndPoints[$a]);
+
+
+				}*/
+
+				
+
+			}
+			else{
+				//not enough base points
+				print "\nnot enough base points to extrude!";
+			}
+		}
+		else{
+			print "\neither no base curve or no profile curves!";
+		}
+	}
+
+
+	global proc calculateAverageProfPointHeights(){
+
+		float $sum = 0.0;
+		float $numPoints = 0.0;
+
+		int $numProfileCurves = size($profileCurves);
+
+		int $currPointIndex = 0;
+		//for each point in the biggest profile curve... there should be a new 'base curve'
+		for($currPointIndex = 0; $currPointIndex < $maxNumPtsInAProfile; ++$currPointIndex){
+
+			//go through current level of each profile curve
+			for($i = 0; $i < $numProfileCurves; ++$i){
+
+				string $currentProfCurve = $profileCurves[$i];
+
+				if($doProfileCurvesStartFromTop[$i] == 0){ //curve starts at bottom
+					print("\n curve starts at bottom!");
+
+					if($numPointsPerCurve[$i] > $currPointIndex){ //if this curve has more points than the index we're at
+						//check if current point intersects the base curve currently
+						
+						float $currentProfPoint[] = `getAttr ($currentProfCurve + ".cv[" + $currPointIndex +"]")`;
+
+						$sum += $currentProfPoint[1];
+						$numPoints++;
+
+					}
+					else{
+
+						//use the highest curve point of the curve as the current curve, even if it's a duplicate
+						int $lastCurvePointIndex = $numPointsPerCurve[$i] - 1;
+						float $currentProfPoint[] = `getAttr ($currentProfCurve + ".cv[" + $lastCurvePointIndex +"]")`;
+
+						$sum += $currentProfPoint[1];
+						$numPoints++;
+					}
+
+				}
+				else if($doProfileCurvesStartFromTop[$i] == 1){ //curve starts at top
+					print("\n curve starts at top!");
+					if($numPointsPerCurve[$i] > $currPointIndex){ //if this curve has more points than the index we're at
+						int $lastCurvePointIndex = $numPointsPerCurve[$i] - 1 - $currPointIndex;
+						float $currentProfPoint[] = `getAttr ($currentProfCurve + ".cv[" + $lastCurvePointIndex +"]")`;
+
+						$sum += $currentProfPoint[1];
+						$numPoints++;
+					}
+					else{
+						int $lastCurvePointIndex = 0;
+						float $currentProfPoint[] = `getAttr ($currentProfCurve + ".cv[" + $lastCurvePointIndex +"]")`;
+
+						$sum += $currentProfPoint[1];
+						$numPoints++;
+					}
+				}
+			}
+
+			$averageProfPointHeights[$currPointIndex] = $sum / $numPoints;
+
+		}
+
+	}
+
+
+	global proc int insertCurveIntoBase(float $baseP1[], float $baseP2[], vector $intersectEdgeP1 , vector $intersectEdgeP2, float $currentProfPoint[]){
+
+				string $pFlag = "-p";
+				string $kFlag = "-k";
+				string $nameFlag = "-name";
+				string $space = " ";
+
+				float $height = $currentProfPoint[1]; //TODO: DEAL WITH THIS FOR ALL CURVES -- should store this somewhere...
+
+
+
+				if(($baseP1[0] == $intersectEdgeP1.x) && ($baseP1[1] == $intersectEdgeP1.y) && ($baseP1[2] == $intersectEdgeP1.z)){
+					print("\nMAYBE ADDING EXTRA PROFILE CURVE POINT!");
+					if(($baseP2[0] == $intersectEdgeP2.x) && ($baseP2[1] == $intersectEdgeP2.y) && ($baseP2[2] == $intersectEdgeP2.z)){
+						print("\nADDING EXTRA PROFILE CURVE POINT!");
+
+						$curveCommand = $curveCommand + $space + $pFlag + $space + $currentProfPoint[0] + $space + $height + $space + $currentProfPoint[2];
+						//$buildingCurvePointNum++;
+						return 1;
+					}
+				}
+				else if(($baseP1[0] == $intersectEdgeP2.x) && ($baseP1[1] == $intersectEdgeP2.y) && ($baseP1[2] == $intersectEdgeP2.z)){
+					print("\nMAYBE ADDING EXTRA PROFILE CURVE POINT!");
+					if(($baseP2[0] == $intersectEdgeP1.x) && ($baseP2[1] == $intersectEdgeP1.y) && ($baseP2[2] == $intersectEdgeP1.z)){
+						//NOTE: DUPLICATE CODE FROM IF STATEMENT UP ABOVE. SHOULD REFACTOR.
+						print("\nADDING EXTRA PROFILE CURVE POINT!");
+
+						$curveCommand = $curveCommand + $space + $pFlag + $space + $currentProfPoint[0] + $space + $height + $space + $currentProfPoint[2];
+						//$buildingCurvePointNum++;
+						return 1;
+					}
+				}
+
+				return 0;
+			//}
+
+
+		//}
+
+	}
+
+
+
+	global proc alignProfileCurves(float $numBasePoints){
+		calculateBaseCentroid();
+
+		int $numProfileCurves = size($profileCurves);
+		for ($i = 0; $i < $numProfileCurves; ++$i){
+			//for now, extrude based on a single profile curve
+			print("\nPROFILE CURVES ALIGN YEAHHH");
+			print("\nnum profile curves: ");
+			print($numProfileCurves);
+			$profileCurve = $profileCurves[$i];
+			
+			print("\naligning curve: ");
+			print($profileCurve);
+			//TODO: CHANGE TO CHECKING if the first or last point is lower???
+			
+			//1. find if the first point or the last point of the profile curve is lower
+			
+			
+			string $profCurveSpans = $profileCurve + ".spans";
+			string $degCurveSpans = $profileCurve + ".degree";
+
+			int $numSpans = `getAttr $profCurveSpans`;
+			int $degree = `getAttr $degCurveSpans`;
+
+			int $numProfilePoints = $numSpans + $degree;
+
+			print("num profile points!");
+			print($numProfilePoints);
+
+			float $firstPos[] = `getAttr ($profileCurve + ".cv[0]")`;//`xform -worldSpace -query -translation $firstPoint`;
+			float $lastPos[] = `getAttr ($profileCurve + ".cv[" + ($numProfilePoints - 1) +"]")`;//;`xform -worldSpace -query -translation $lastPoint`;
+
+
+			int $isFirstPosLow = 1; //bool for if first point or last
+			$doProfileCurvesStartFromTop[$i] = $isFirstPosLow;
+
+			float $minYPointPos[] = $firstPos;
+			print("\nfirst pos y: ");
+			print($firstPos);
+			print("\nlastPos y: ");
+			print($lastPos[1]);
+			
+			if($lastPos[1] < $firstPos[1]){
+				print("\nfirst pos is HIGH");
+				$isFirstPosLow = 0;
+				$minYPointPos = $lastPos;
+			}
+
+			//translate curve to y = 0 if necessary...
+			if( ($i == 0) || ($minYPointPos[1] < $minPointHeightDiff) ){
+				$minPointHeightDiff = $minYPointPos[1];
+			}
+
+			if($minYPointPos[1] != 0){
+				print("\nmoving profile curve down");
+				print($minYPointPos[1]);
+				select -r $profileCurve ;
+				move -r 0 (-($minYPointPos[1])) 0 ;
+
+			}
+
+			//3. find edge of curve that intersects with line (bottom curve point and polygon centroid)
+
+			//get minYPoint's new position
+			
+			$minYPointPos[1] = 0; //when moved, should have been set to zero --> can set this directly.
+
+
+
+			//4. move the profile curve to intersect with the base curve
+
+			float $intersectionPoint[];
+
+
+			float $intersectEdgeStart[] = {0.0, 0.0, 0.0};
+			float $intersectEdgeEnd[] = {0.0, 0.0, 0.0};
+			int $isIntersection = 0;
+
+			int $j = 0;
+			for ($j = 0; $j < $numBasePoints - 1; ++$j){
+
+				float $p1Pos[] = `getAttr ($baseCurve + ".cv[" + $j +"]")`;//`xform -worldSpace -query -translation $p1`;
+
+
+				float $jPlus = $j + 1;
+				float $p2Pos[] = `getAttr ($baseCurve + ".cv[" + $jPlus +"]")`;//`xform -worldSpace -query -translation $p2`;
+
+				//takes in bottom profile curve point, and edge defining positions
+				if ( checkProfileEdgeIntersection($minYPointPos, $p1Pos, $p2Pos) == 1) {	
+
+					print "calculating intersection point!";
+					
+					//calculate the intersection point
+					$tempIntersectionPoint = calculateIntersectionPointXZ($minYPointPos, $baseCentroid, $p1Pos, $p2Pos);
+
+
+
+					if($isIntersection == 1){ //there has already been an intersection
+						//if the distance from the minPoint to the edge is less -- use that as the intersection!
+						print("\nCHECK COMPETING INTERSECTION");
+						if(getDistance($minYPointPos, $tempIntersectionPoint) < getDistance($minYPointPos, $intersectionPoint)){
+
+							$intersectEdgeStart = $p1Pos;
+							$intersectEdgeEnd = $p2Pos;
+
+							$intersectionPoint = $tempIntersectionPoint;
+
+							print("\nINTERSECTION DEFEATED");
+						}
+						//else, don't change the current intersection point
+
+					}
+					else{
+						print("\nSET INIT INTERSECTION");
+						$intersectEdgeStart = $p1Pos;
+						$intersectEdgeEnd = $p2Pos;
+
+						$intersectionPoint = $tempIntersectionPoint;
+
+						$isIntersection = 1;
+					}
+
+				}
+			}
+			if($isIntersection == 1){ // there should always be an intersection, as we're moving the profile toward the base
+				//DEBUG SPHERE
+				polySphere -ch on -o on -r 0.189486 ;
+				move -r $intersectionPoint[0] $intersectionPoint[1] $intersectionPoint[2];
+
+
+
+				//minYPoint - intersection point -- need to move the profile curve to meet the intersection point...
+				float $diffVec[] = {$intersectionPoint[0] - $minYPointPos[0], $intersectionPoint[1] - $minYPointPos[1], $intersectionPoint[2] - $minYPointPos[2]};
+
+				print("\nmoving to this intersection point:");
+				print($intersectionPoint[0]);
+				print("\n");
+				print($intersectionPoint[1]);
+				print("\n");
+				print($intersectionPoint[2]);
+
+				//move the profile curve to align with edge!
+				select -r $profileCurve ;
+				move -r (-$diffVec[0]/2.0) 0.0 (-$diffVec[2]/2.0) ;
+				$minYPointPos[0] = $minYPointPos[0] + (-$diffVec[0]/2.0);
+				$minYPointPos[2] = $minYPointPos[2] + (-$diffVec[2]/2.0);
+
+				print("OH HEY ADDING AN INTERSECTION POINT NOW");
+
+				//HERE WE KEEP TRACK OF THE INTERSECTION POINTS
+				vector $intersectionStartVector = <<$intersectEdgeStart[0],$intersectEdgeStart[1],$intersectEdgeStart[2]>>;
+				vector $intersectionEndVector = <<$intersectEdgeEnd[0],$intersectEdgeEnd[1],$intersectEdgeEnd[2]>>;
+
+				$intersectionStartPoints[ size($intersectionStartPoints) ] = $intersectionStartVector;
+				$intersectionEndPoints[ size($intersectionEndPoints) ] = $intersectionEndVector;
+
+				print("\nINTERSECTION START\n");
+					print($intersectionStartVector.x);
+					print("\n");
+					print($intersectionStartVector.y);
+					print("\n");
+					print($intersectionStartVector.z);
+
+
+				print("\nINTERSECTION END\n");
+					print($intersectionEndVector.x);
+					print("\n");
+					print($intersectionEndVector.y);
+					print("\n");
+					print($intersectionEndVector.z);
+
+			}
+
+
+
+
+
+			//add points to global list of profile points!
+			for($j = 0; $j < $numProfilePoints; ++$j){
+				float $currentPoint[] = `getAttr ($profileCurve + ".cv[" + $j +"]")`;
+
+				//POSSIBLE TODO: add the alignment to these points!
+
+
+				vector $currentPointVector = <<$currentPoint[0], $currentPoint[1], $currentPoint[2]>>;
+
+				int $arraySize = size($allProfilePoints);
+				$allProfilePoints[$arraySize] = $currentPointVector;
+			}
+			print("\nTHE BASE CENTROID OY VEY FOUR\n");
+					print($baseCentroid[0]);
+					print("\n");
+					print($baseCentroid[1]);
+					print("\n");
+					print($baseCentroid[2]);
+
+
+		}
+
+
+	}
+
+	global proc calculateBaseCentroid(){
+		// formula: http://en.wikipedia.org/wiki/Centroid#Centroid_of_polygon
+
+		print("\n calculating centroid!");
+
+		float $baseCentroidX;
+		float $baseCentroidZ;
+
+		string $baseCurveSpans = $baseCurve + ".spans";
+		string $degCurveSpans = $baseCurve + ".degree";
+		int $spans = `getAttr $baseCurveSpans`;
+		int $degree = `getAttr $degCurveSpans`;
+
+		int $numBasePoints = $spans + $degree;
+		
+		float $area;
+		if($numBasePoints >= 3){
+			for($i = 0; $i < $numBasePoints - 1; ++$i){
+
+				float $p1Pos[] = `getAttr ($baseCurve + ".cv[" + $i +"]")`;
+				float $iPlus = $i + 1;
+				float $p2Pos[] = `getAttr ($baseCurve + ".cv[" + $iPlus + "]")`;
+
+				// A = p1.x * p2.z - p2.x * p1.z
+				$area += ( $p1Pos[0] * $p2Pos[2] ) - ( $p2Pos[0] * $p1Pos[2] );
+
+				/*print ("\n p1: ");
+				print $p1Pos[0];
+				print (" ");
+				print $p1Pos[2];
+
+				print ("\n p2: ");
+				print $p2Pos[0];
+				print (" ");
+				print $p2Pos[2];*/
+
+				//Cx = ( p1.x + p2.x ) * (p1.x * p2.z - p2.x * p1.z)
+				$baseCentroidX += ( $p1Pos[0] + $p2Pos[0] ) * ( ( $p1Pos[0] * $p2Pos[2] ) - ( $p2Pos[0] * $p1Pos[2] ) ) ;
+
+				//Cz = ( p1.z + p2.z ) * (p1.x * p2.z - p2.x * p1.z)
+				$baseCentroidZ += ( $p1Pos[2] + $p2Pos[2] ) * ( ( $p1Pos[0] * $p2Pos[2] ) - ( $p2Pos[0] * $p1Pos[2] ) );
+
+
+
+				if($i == $numBasePoints - 2){
+					//DO ONE LAST ROUND WITH THE FIRST POINT AND THE LAST POINT
+					float $p1Pos[] = `getAttr ($baseCurve + ".cv[" + $iPlus + "]")`;
+					float $p2Pos[] = `getAttr ($baseCurve + ".cv[0]")`;
+
+					$area += ( $p1Pos[0] * $p2Pos[2] ) - ( $p2Pos[0] * $p1Pos[2] );
+
+					$baseCentroidX += ( $p1Pos[0] + $p2Pos[0] ) * ( ( $p1Pos[0] * $p2Pos[2] ) - ( $p2Pos[0] * $p1Pos[2] ) ) ;
+
+					
+					$baseCentroidZ += ( $p1Pos[2] + $p2Pos[2] ) * ( ( $p1Pos[0] * $p2Pos[2] ) - ( $p2Pos[0] * $p1Pos[2] ) );
+				}
+			}
+		}
+
+		//do (outside of sum) scalar mults
+		$area = $area*0.5;
+		print("\nbase area: ");
+		print $area;
+		float $areaMult = 1.0/(6.0*$area);
+		$baseCentroidX = $baseCentroidX * $areaMult;
+		$baseCentroidZ = $baseCentroidZ * $areaMult;
+
+		print("\ncentroid X: ");
+		print $baseCentroidX;
+
+		print("\ncentroid Z: ");
+		print $baseCentroidZ;
+
+		$baseCentroid[0] = $baseCentroidX;
+		$baseCentroid[1] = 0;
+		$baseCentroid[2] = $baseCentroidZ;
+
+		//DEBUG SPHERE
+		polySphere -ch on -o on -r 0.05;
+		move -r $baseCentroidX 0.0 $baseCentroidZ;
+	}
+
+	global proc int checkProfileEdgeIntersection(float $minYPointPos[], float $p1Pos[], float $p2Pos[]){
+		// algorithm: http://bryceboe.com/2006/10/23/line-segment-intersection-algorithm/
+
+		calculateBaseCentroid();
+
+		print("\nminYPointPos: ");
+		print($minYPointPos);
+		print("p1Pos:");
+		print($p1Pos);
+		print("p2Pos");
+		print($p2Pos);
+
+
+		if( checkCCW ( $minYPointPos, $p1Pos, $p2Pos ) != checkCCW ( $baseCentroid , $p1Pos, $p2Pos ) ){
+			if( checkCCW ( $minYPointPos, $baseCentroid, $p1Pos) != checkCCW ( $minYPointPos, $baseCentroid, $p2Pos ) ){
+				print ("\nan intersection!");
+				return 1;
+			}
+		}
+		else{
+			print("\nno intersection!");
+			return 0;
+		}
+
+		return 0;
+	}
+
+	//check CCW -- in XZ plane
+	global proc int checkCCW(float $a[], float $b[], float $c[]){
+		if( ($c[2] - $a[2]) * ($b[0] - $a[0]) > ($b[2] - $a[2]) * ($c[0] - $a[0]) ) {
+			print("\nis ccw!");
+			return 1;
+		
+		}
+		print("\nnot ccw!");
+		return 0;
+	}
+
+	global proc float[] calculateIntersectionPointXZ(float $start1[], float $end1[], float $start2[], float $end2[]){ //in the XZ plane
+		calculateBaseCentroid();
+
+		print("\nGAHHH\n");
+
+		print("\nstart point 1: ");
+		print($start1);
+		print("\nend point 1: ");
+		print($end1);
+		print("\nstart point 2: ");
+		print($start2);
+		print("\nend point 2: ");
+		print($end2);
+
+		//make sure the points with the lowest x coord are the start points
+		if($start1[0] > $end1[0]){
+			print("\n SWAP!");
+			float $temp[] = $start1;
+			$start1 = $end1;
+			$end1 = $temp;
+		}
+
+		if($start2[0] > $end2[0]){
+			print("\n SWAP!");
+			float $temp[] = $start2;
+			$start2 = $end2;
+			$end2 = $temp;
+		}
+
+
+		print("\nstart point 1: ");
+		print($start1);
+		print("\nend point 1: ");
+		print($end1);
+		print("\nstart point 2: ");
+		print($start2);
+		print("\nend point 2: ");
+		print($end2);
+
+		//solve for slope m
+		float $rise1 = ($end1[2] - $start1[2]);
+		float $run1 = ($end1[0] - $start1[0]);
+
+		float $rise2 = ($end2[2] - $start2[2]);
+		float $run2 = ($end2[0] - $start2[0]);
+
+
+		if($run1 == 0){
+			if($run2 == 0){
+				//parallel! both are vertical lines
+				print ("\nERROR: NO INTERSECTION -- VERTICAL PARALLEL LINES");
+			
+				float $intersection[] = {0.0, 0.0, 0.0};
+				return $intersection;
+			}
+			float $m2 = $rise2 / $run2;
+
+			float $b2 = $start2[2] - ($m2 * $start2[0]);
+
+			float $x = $start1[0]; //line is vertical, constant x
+			float $z = ($m2 * $x) + $b2;
+
+			float $intersection[] = {$x, 0.0, $z};
+			print("\nintersection: ");
+			print($intersection);
+			return $intersection; 
+		}
+		else if($run2 == 0){
+			float $m1 = $rise1 / $run1;
+
+			float $b1 = $start1[2] - ($m1 * $start1[0]);
+
+			float $x = $start2[0]; //line is vertical, constant x
+			float $z = ($m1 * $x) + $b1;
+
+			float $intersection[] = {$x, 0.0, $z};
+			print("\nintersection A: ");
+			print($intersection);
+			return $intersection;
+		}
+		else{
+
+			//...now continue with usual case...
+
+			//solve for slope m
+			float $m1 = $rise1 / $run1;
+			float $m2 = $rise2 / $run2;
+
+
+			//check for parallel lines -- same slope
+			if($m1 == $m2){
+				print ("\nERROR: NO INTERSECTION -- PARALLEL LINES");
+			
+				float $intersection[] = {0.0, 0.0, 0.0};
+				return $intersection;
+			}
+			else{ //otherwise not parallel
+				//solve for z-intercept b
+				float $b1 = $start1[2] - ($m1 * $start1[0]);
+				float $b2 = $start2[2] - ($m2 * $start2[0]);
+
+				float $x = ($b1 - $b2) / ($m2 - $m1);
+
+				//solve for z:
+				float $z = ($m1 * $x) + $b1;
+
+				float $intersection[] = {$x, 0.0, $z};
+				print("\nintersection: B");
+				print($intersection);
+				print("\nslope m1");
+				print($m1);
+				print("\nslope m2");
+				print($m2);
+				print("\nintercept b1");
+				print($b1);
+				print("\nintercept b2");
+				print($b2);
+				return $intersection;
+			}
+		}
+
+	}
+
+
+	global proc extrudeFromCurve (){ //TODO: change to using base curve
+		string $selected[] = `ls -sl`;
+		string $selectedCurve = $selected[0];
+
+		//int $numCurvePoints = `getAttr $selected.spans` + `getAttr $selected.degree`;
+
+
+
+		select -r $selectedCurve ;
+		duplicate -rr;
+		move -r 0 6 0 ;
+
+		select -tgl $selectedCurve ;
+
+		string $selected[] = `ls -sl`;
+		$selectedCurve = $selected[0];
+		string $selectedCurve2 = $selected[1];
+		loft -ch 1 -u 1 -c 0 -ar 1 -d 3 -ss 1 -rn 0 -po 0 -rsn true $selectedCurve $selectedCurve2;
+		print("hello");
+
+
+		//TODO: maybe don't do this...
+		/*if($numCurvePoints > 1){
+			for( $i=0; $i<$numCurvePoints - 1; ++$i )
+			{
+				$firstPoint = $selectedCurve.u[$i];
+				$secondPoint = $selectedCurve.u[$i+1];
+
+				//extrude between the two points in a particular direction -- let's go with up.
+
+			}
+		}*/
+
+		//use $selected[0] to get the curve points
+
+		//createNode randomNode;
+		//connectAttr ($selected[0] + ".matrix") instancer1.inputHierarchy[0];
+		//connectAttr randomNode1.outPoints instancer1.inputPoints;
+	}
+
+	global proc deleteCurveUI () {
+		deleteUI CurveMenu;
+	}
+}
