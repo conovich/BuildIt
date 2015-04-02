@@ -394,11 +394,17 @@
 				}
 
 				//6. loft!
+				if($numProfilePoints > 0){
+					string $firstCurve = $buildingCurves[0];
+					closeCurve -ch 1 -ps 1 -rpo 1 -bb 0.5 -bki 0 -p 0.1 $firstCurve; //close the initial curve
+				}
 				for($i = 0; $i < $numProfilePoints - 1; ++$i){
 					string $curve1 = $buildingCurves[$i];
 					string $curve2 = $buildingCurves[$i+1];
+					closeCurve -ch 1 -ps 1 -rpo 1 -bb 0.5 -bki 0 -p 0.1 $curve2; //close the second curve
 
-					loft -ch 1 -u 1 -c 0 -ar 1 -d 3 -ss 1 -rn 0 -po 0 -rsn true $curve1 $curve2;
+					//loft -ch 1 -u 1 -c 0 -ar 1 -d 3 -ss 1 -rn 0 -po 0 -rsn true $curve1 $curve2; //nurbs
+					loft -ch 1 -u 1 -c 0 -ar 1 -d 3 -ss 1 -rn 0 -po 1 -rsn true $curve1 $curve2; //polgyons
 				}
 
 			}
