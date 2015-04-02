@@ -70,7 +70,7 @@
 		print "saved profile curve!";
 	}
 
-	global proc loadAnchor () {
+	global proc loadAnchors () {
 	  //get all anchorNodes, get their objfile field and pos field. import all obj files and move them to the position
 	  string $anchorNodes[] = `ls -type anchorNode`;
 		int $size = size($anchorNodes);

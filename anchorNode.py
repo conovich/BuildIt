@@ -1,5 +1,4 @@
-# randomNode.py
-#   Produces random locations to be used with the Maya instancer node.
+# anchorNode.py
 
 import sys
 import random

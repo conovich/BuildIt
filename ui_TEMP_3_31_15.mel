@@ -12,6 +12,8 @@
 	global vector $intersectionEndPoints[];
 	global string $curveCommand;
 	global float $averageProfPointHeights[]; //for each level!
+	global int $createAnchorMode; //starts as 0, becomes 1 after clicking base, 2 after clicking profile
+	global float $anchorPos[];
 	
 	global proc createCurveUI () {
 		menu -parent MayaWindow -label "CURVE" -tearOff true "CurveMenu";
@@ -23,6 +25,88 @@
 		menuItem -label "Extrude From Selected" -command "extrudeFromCurve" -parent CurveMenu "extrudeSelectedItem";
 
 		menuItem -label "Extrude Building" -command "extrudeBuilding" -parent CurveMenu "extrudeItem";
+		menuItem -label "Create Anchor" -command "createAnchor" -parent CurveMenu "createAnchor";
+		menuItem -label "Load Anchors" -command "loadAnchors" -parent CurveMenu "loadAnchors";
+
+		// Create the dragger context that handles mouse events
+		draggerContext
+		  -space "world"
+	    -pressCommand "setAnchorPos"
+	    -cursor       "hand"
+	    sampleContext;
+
+	}
+
+	global proc createCameraUI () {
+		string $window = `window -title "Build It!"
+       -iconName "Build It"
+       -widthHeight 800 900`;
+		columnLayout -adjustableColumn true;
+       //button -label "Do Nothing";
+       //button -label "Close" -command ("deleteUI -window " + $window);
+	   paneLayout -cn "vertical2" -ps 1 50 50 -ps 2 50 50 -height 800;// Attach Panel to window
+		   string $floorPlanPanel = `modelPanel "floorPlan"`;
+		   string $profilePanel = `modelPanel "profile"`;
+		   string $topPanel = `getPanel -withLabel "Top View"`;
+		   string $frontPanel = `getPanel -withLabel "Front View"`;
+		   string $topCam = `modelPanel -query -camera $topPanel`;
+		   string $frontCam = `modelPanel -query -camera $frontPanel`;
+			//modelPanel -edit -camera $floorPlanPanel $topCam ;
+			modelPanel -edit -copy $topPanel $floorPlanPanel ;  
+			modelPanel -edit -copy $frontPanel $profilePanel;
+			setParent ..;
+			showWindow $window;
+	}
+
+	// Procedure called on press
+	global proc setAnchorPos()
+	{
+	    float $pressPosition[] = `draggerContext -query -anchorPoint sampleContext`;
+	    print ("Press: " + $pressPosition[0] + " " + $pressPosition[1] + " "
+	        + $pressPosition[2] + "\n");
+	    if($createAnchorMode == 0){
+	    	$anchorPos[0] = $pressPosition[0];
+	    	$anchorPos[2] = $pressPosition[2];
+	    	$createAnchorMode = 1;
+	    }
+	    else if($createAnchorMode == 1){
+	    	$anchorPos[1] = $pressPosition[1];
+	    	$createAnchorMode = 2;
+	    	string $anchor = `createNode anchorNode`;
+	    	print ($anchor + ".pos");
+	    	setAttr ($anchor + ".pos") $anchorPos[0] $anchorPos[1] $anchorPos[2];
+	    	string $sph[] = `sphere -r 0.1`;
+	    	move -absolute $anchorPos[0] $anchorPos[1] $anchorPos[2] $sph[0];
+	    }
+
+	}
+  
+	global proc createAnchor () {
+		// Set current tool to use the sample context created.
+		// Results can be seen by dragging mouse in main window
+		setToolTo sampleContext;
+		$createAnchorMode = 0;
+		$anchorPos = {0, 0, 0};
+	}
+
+	global proc loadAnchors () {
+	  //get all anchorNodes, get their objfile field and pos field. import all obj files and move them to the position
+	  string $anchorNodes[] = `ls -type anchorNode`;
+		int $size = size($anchorNodes);
+		
+		// loop through the array and print each value [for loop notes]
+		for($i=0;$i<$size;++$i) {
+			string $anchorNode = $anchorNodes[ $i ];
+			float $pos[] = `getAttr $anchorNode.pos`;
+			string $objfile = `getAttr $anchorNode.obj`;
+			file -import -type "OBJ" $objfile;
+			//move -absolute $pos 
+		}
+		file -import -type "OBJ" -ra true -mergeNamespacesOnClash false -namespace "cube" -options "mo=1;lo=0"  -pr -loadReferenceDepth "all" "C:/Users/Emre Tanirgan/Desktop/cube.obj";
+		select -r cube:cube ;
+		move -absolute 0 1 0 cube:cube;
+		//union operation: polyBoolOp -op 1 -ch 1 -useThresholds 1 -preserveColor 0 cube:cube pCube1;
+
 
 	}
 
