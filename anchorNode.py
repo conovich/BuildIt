@@ -15,6 +15,7 @@ def MAKE_INPUT(attr):
     attr.setStorable(True)
     attr.setReadable(True)
     attr.setWritable(True)
+    attr.setHidden(False)
 def MAKE_OUTPUT(attr):
     attr.setKeyable(False)
     attr.setStorable(False)
@@ -63,6 +64,9 @@ class anchorNode(OpenMayaMPx.MPxNode):
 
         nodePos = data.inputValue(anchorNode.inPos).asFloat3()
         obj = data.inputValue(anchorNode.objFile).asString()
+        print nodePos
+        print obj
+        print "aa"
 
         '''print "woop"
         #create position and id 
@@ -100,7 +104,8 @@ def nodeInitializer():
     randomNode.randomPoints = tAttr.create("RandomPoints", "rand", OpenMaya.MFnArrayAttrsData.kDynArrayAttrs)
     MAKE_OUTPUT(tAttr)'''
 
-    anchorNode.objFile = tAttr.create("OBJ File", "obj", OpenMaya.MFnData.kString)
+    stringData = OpenMaya.MFnStringData().create(" ")
+    anchorNode.objFile = tAttr.create("Objfile", "obj", OpenMaya.MFnData.kString, stringData)
     MAKE_INPUT(tAttr)
     anchorNode.inPos = nAttr.create("Position", "pos", OpenMaya.MFnNumericData.k3Float)
     MAKE_INPUT(nAttr)
