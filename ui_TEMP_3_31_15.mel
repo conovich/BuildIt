@@ -12,6 +12,7 @@
 	global vector $intersectionEndPoints[];
 	global string $curveCommand;
 	global float $averageProfPointHeights[]; //for each level!
+	global string $loftedSurfaces[];
 	global int $createAnchorMode; //starts as 0, becomes 1 after clicking base, 2 after clicking profile
 	global float $anchorPos[];
 	
@@ -179,7 +180,7 @@
 	}
  
 
-	global proc extrudeBuilding (){
+		global proc extrudeBuilding (){
 		if ((size($profileCurves) > 0) && ($baseCurve != "")){
 
 			int $spans1 = `getAttr $baseCurve.spans`;
@@ -426,6 +427,10 @@
 
 					//loft -ch 1 -u 1 -c 0 -ar 1 -d 3 -ss 1 -rn 0 -po 0 -rsn true $curve1 $curve2; //nurbs
 					loft -ch 1 -u 1 -c 0 -ar 1 -d 3 -ss 1 -rn 0 -po 1 -rsn true $curve1 $curve2; //polygons
+
+					string $selected[] = `ls -sl`;
+					string $loftedSurface = $selected[0];
+					$loftedSurfaces[$i] = $loftedSurface;
 				}
 				
 				/* //DEBUG
@@ -440,6 +445,17 @@
 
 				}*/
 
+				//combine the lofted meshes:
+				string $combineLoftedSurfacesCommand = "polyUnite -ch 1 -mergeUVSets 1";
+				for($i = 0; $i < size($buildingCurves) - 1; ++$i){
+					$combineLoftedSurfacesCommand = $combineLoftedSurfacesCommand + " " + $loftedSurfaces[$i];
+				}
+				eval ($combineLoftedSurfacesCommand);
+
+				//fill in the holes!
+				string $selected[] = `ls -sl`;
+				string $theExtrudedBuilding = $selected[0];
+				polyCloseBorder -ch 1 $theExtrudedBuilding;
 				
 
 			}
