@@ -66,11 +66,13 @@
 	    print ("Press: " + $pressPosition[0] + " " + $pressPosition[1] + " "
 	        + $pressPosition[2] + "\n");
 	    if($createAnchorMode == 0){
+	    	//$anchorPos[0] = $pressPosition[0];
+	    	//$anchorPos[2] = $pressPosition[2];
+	    	//$createAnchorMode = 1;
+	    //}
+	    //else if($createAnchorMode == 1){
 	    	$anchorPos[0] = $pressPosition[0];
 	    	$anchorPos[2] = $pressPosition[2];
-	    	$createAnchorMode = 1;
-	    }
-	    else if($createAnchorMode == 1){
 	    	$anchorPos[1] = $pressPosition[1];
 	    	$createAnchorMode = 2;
 	    	string $anchor = `createNode anchorNode`;
@@ -78,6 +80,10 @@
 	    	setAttr ($anchor + ".pos") $anchorPos[0] $anchorPos[1] $anchorPos[2];
 	    	string $sph[] = `sphere -r 0.1`;
 	    	move -absolute $anchorPos[0] $anchorPos[1] $anchorPos[2] $sph[0];
+	    	string $path = `fileDialog`;
+	    	setAttr ($anchor + ".obj") -type "string" $path;
+	    	print $path;
+	    	select $anchor;
 	    }
 
 	}
