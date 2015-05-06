@@ -933,7 +933,7 @@
 			//delete the building curves -- don't need them anymore
 			for($i = 0; $i < size($buildingCurves); ++$i){
 				select -r $buildingCurves[$i];
-				doDelete;
+				//doDelete;
 			}
 			clear($buildingCurves);
 			
@@ -1681,25 +1681,68 @@
 	}
 	
 	global proc loadAnchors () {
+
 	  //get all anchorNodes, get their objfile field and pos field. import all obj files and move them to the position
+
 	  string $anchorNodes[] = `ls -type anchorNode`;
-		int $size = size($anchorNodes);
+
+		 int $size = size($anchorNodes);
+
 		
-		// loop through the array and print each value [for loop notes]
-		for($i=0;$i<$size;++$i) {
-			string $anchorNode = $anchorNodes[ $i ];
-			float $pos[] = `getAttr $anchorNode.pos`;
-			string $objfile = `getAttr $anchorNode.obj`;
-			file -import -type "OBJ" $objfile;
-			//move -absolute $pos 
-		}
-		file -import -type "OBJ" -ra true -mergeNamespacesOnClash false -namespace "cube" -options "mo=1;lo=0"  -pr -loadReferenceDepth "all" "C:/Users/Emre Tanirgan/Desktop/cube.obj";
-		select -r cube:cube ;
-		move -absolute 0 1 0 cube:cube;
-		//union operation: polyBoolOp -op 1 -ch 1 -useThresholds 1 -preserveColor 0 cube:cube pCube1;
+
+		 // loop through the array and print each value [for loop notes]
+
+		 for($i=0;$i<$size;++$i) {
+
+			 string $anchorNode = $anchorNodes[ $i ];
+
+			 print $anchorNode;
+
+			 float $pos[] = `getAttr ($anchorNode + ".pos")`;
+
+			 print $pos;
+
+			 string $objfile = `getAttr ($anchorNode + ".obj")`;
+
+			 //file -import -type "OBJ" -namespace ("anchor" + $i) $objfile;
+
+			 string $before[] = `ls -geometry`;
+
+			 file -import -type "OBJ" $objfile;
+
+			 string $after[] = `ls -geometry`;
+
+			 string $newObjs[] = stringArrayRemove($before,$after);
+
+			 select -r $newObjs;
+
+			 //select ("anchor" + $i + ":*");
+
+			 //string $selected[] = `ls -sl`;
+
+			 //move -r -absolute 5 5 5;
+
+			 move -r -absolute $pos[0] $pos[1] $pos[2];
+
+			
+
+		 }
+
+		 //file -import -type "OBJ" -ra true -mergeNamespacesOnClash false -namespace "cube" -options "mo=1;lo=0"  -pr -loadReferenceDepth "all" "C:/Users/Emre Tanirgan/Desktop/cube.obj";
+
+		 //select -r cube:cube ;
+
+		 //move -absolute 0 1 0 cube:cube;
+
+		 //union operation: polyBoolOp -op 1 -ch 1 -useThresholds 1 -preserveColor 0 cube:cube pCube1;
 
 
-	}
+
+
+
+
+
+	 }
 
 
 }
