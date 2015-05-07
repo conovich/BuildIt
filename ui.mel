@@ -328,7 +328,42 @@
 			}
 
 
-			//TODO: print anchors to file!
+			//Print anchors to file!
+			string $anchorNodes[] = `ls -type anchorNode`;
+			fprint $fileId (size($anchorNodes) +"\n") ;
+			for($i = 0; $i < size($anchorNodes); ++$i){
+				string $currentAnchor = $anchorNodes[$i];
+				string $commandToPrint = "createNode anchorNode";
+				print("\n to print: ");
+				print($commandToPrint);
+
+				fprint $fileId ($commandToPrint+"\n") ;
+
+	    	/*string $anchor = `createNode anchorNode`;
+	    	print ($anchor + ".pos");
+	    	setAttr ($anchor + ".pos") $anchorPos[0] $anchorPos[1] $anchorPos[2];*/
+	    	
+	    	/*setAttr ($anchor + ".scale") 1.0;
+	    	move -absolute $anchorPos[0] $anchorPos[1] $anchorPos[2] $sph[0];
+			connectAttr ($sph[0] + ".translate") ($anchor + ".pos");
+	    	string $path = `fileDialog`;
+	    	setAttr ($anchor + ".obj") -type "string" $path;
+	    	print $path;
+	    	select $anchor;*/
+	    	float $pos[] = `getAttr ($currentAnchor + ".pos")`;
+	    	float $scale = `getAttr ($currentAnchor + ".scale")`;
+	    	string $objFile = `getAttr ($currentAnchor + ".obj")`;
+
+	    	//string $sphCommand = "string $sph[] = `sphere -r 0.1`";
+	    	//string $sphConnect = "connectAttr ($sph[0] + ".translate") ($anchor + ".pos");
+				string $posCommand = "setAttr " + ($currentAnchor + ".pos ") + $pos[0] + " " + $pos[1] + " " + $pos[2];
+				fprint $fileId ($posCommand+"\n") ;
+				string $scaleCommand = "setAttr " + ($currentAnchor + ".scale ") + $scale;
+				fprint $fileId ($scaleCommand+"\n") ;
+				string $objCommand = "setAttr " + ($currentAnchor + ".obj ") + "-type \"string\" " + "\"" + $objFile + "\"";
+				fprint $fileId ($objCommand+"\n") ;
+
+			}
 			  
 			// Close File  
 			fclose $fileId ; 
@@ -382,6 +417,41 @@
 				eval($nextLine);
 				saveProfileCurve();
 			}  
+
+			$nextLine = `fgetline $fileId` ;
+			int $numberOfAnchors = $nextLine;
+
+			//Create Anchors
+			int $i = 0;
+			for($i = 0; $i < $numberOfAnchors; ++$i) {  
+			  		  
+				// Get Next Line And Continue  
+				//PROFILE CURVES
+				$nextLine = `fgetline $fileId` ;  
+				eval($nextLine);
+				print($nextLine);
+				$nextLine = `fgetline $fileId` ;  
+				eval($nextLine);
+				print($nextLine);
+				$nextLine = `fgetline $fileId` ;  
+				eval($nextLine);
+				print($nextLine);
+				$nextLine = `fgetline $fileId` ;  
+				eval($nextLine);
+				print($nextLine);
+				//saveProfileCurve();
+			} 
+
+			string $anchorNodes[] = `ls -type anchorNode`;
+			
+			for($i = 0; $i < size($anchorNodes); ++$i){
+				print("here");
+				string $currentAnchor = $anchorNodes[$i];
+		    float $anchorPos[] = `getAttr ($currentAnchor+".pos")`;
+		    string $sph[] = `sphere -r 0.1`;
+		    connectAttr ($sph[0] + ".translate") ($currentAnchor + ".pos");
+		  }
+	    
 		}
 		else{
 			print("building plugin not loaded!");
@@ -1670,6 +1740,7 @@
 	    	print ($anchor + ".pos");
 	    	setAttr ($anchor + ".pos") $anchorPos[0] $anchorPos[1] $anchorPos[2];
 	    	string $sph[] = `sphere -r 0.1`;
+	    	setAttr ($anchor + ".scale") 1.0;
 	    	move -absolute $anchorPos[0] $anchorPos[1] $anchorPos[2] $sph[0];
 			connectAttr ($sph[0] + ".translate") ($anchor + ".pos");
 	    	string $path = `fileDialog`;
@@ -1716,15 +1787,30 @@
 
 			 select -r $newObjs;
 
+			 //string $resMesh = `polyUnite -ch 1 $newObjs`;
+
+
 			 //select ("anchor" + $i + ":*");
 
 			 //string $selected[] = `ls -sl`;
 
 			 //move -r -absolute 5 5 5;
-
 			 move -r -absolute $pos[0] $pos[1] $pos[2];
 
-			
+			 string $transform = "";
+
+		   if ( "transform" != `nodeType $newObjs[0]` )
+		   // If given node is already a transform, just pass on through
+		   {
+		      string $parents[] = `listRelatives -fullPath -parent $newObjs[0]`;
+		      $transform = $parents[0];
+		   }
+
+			 
+
+			connectAttr ($anchorNode + ".scale") ($transform + ".scale.scaleX");
+			connectAttr ($anchorNode + ".scale") ($transform + ".scale.scaleY");
+			connectAttr ($anchorNode + ".scale") ($transform + ".scale.scaleZ");
 
 		 }
 

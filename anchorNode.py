@@ -37,6 +37,7 @@ class anchorNode(OpenMayaMPx.MPxNode):
     randomPoints = OpenMaya.MObject()
     inMin = OpenMaya.MObject()
     inMax = OpenMaya.MObject()
+    scale = OpenMaya.MObject()
 
     inPos = OpenMaya.MObject()
     objFile = OpenMaya.MObject()
@@ -61,6 +62,7 @@ class anchorNode(OpenMayaMPx.MPxNode):
         maxpos = data.inputValue(randomNode.inMax).asFloat3()
         numPts = data.inputValue(randomNode.inNumPoints).asLong()'''
 
+        scale = data.inputValue(anchorNode.scale).asFloat()
         nodePos = data.inputValue(anchorNode.inPos).asFloat3()
         obj = data.inputValue(anchorNode.objFile).asString()
         print nodePos
@@ -108,6 +110,8 @@ def nodeInitializer():
     MAKE_INPUT(tAttr)
     anchorNode.inPos = nAttr.create("Position", "pos", OpenMaya.MFnNumericData.k3Float)
     MAKE_INPUT(nAttr)
+    anchorNode.scale = nAttr.create("Scale", "scale", OpenMaya.MFnNumericData.kFloat)
+    MAKE_INPUT(nAttr)
 
     try:
         # TODO:: add the attributes to the node and set up the
@@ -115,6 +119,7 @@ def nodeInitializer():
         print "Initialization!\n"
         anchorNode.addAttribute(anchorNode.inPos)
         anchorNode.addAttribute(anchorNode.objFile)
+        anchorNode.addAttribute(anchorNode.scale)
 
         '''randomNode.addAttribute(randomNode.inNumPoints)
         randomNode.addAttribute(randomNode.inMin)
