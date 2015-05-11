@@ -1,0 +1,18 @@
+curve -d 1 -p -2.002518892 0 -1.945843829 -p -1.964735516 0 1.039042821 -p 2.002518892 0 1.076826196 -p 2.002518892 0 -1.945843829 -k 0 -k 1 -k 2 -k 3
+3
+curve -d 1 -p -0.05100464403 3.740554156 -0.005437407674 -p -1.902390034 2.833753149 -0.005437407674 -p -1.977956785 0 -0.005437407674 -k 0 -k 1 -k 2
+curve -d 1 -p 0.0004208549643 3.796104429 -0.07038747385 -p 0.0004208549643 2.892270041 -1.991035548 -p 0.0004208549643 0 -1.945843829 -k 0 -k 1 -k 2
+curve -d 1 -p -0.0002166089101 3.660529271 0.1539181372 -p -0.0002166089101 2.869674182 0.9899649459 -p -0.0002166089101 0 1.057752525 -k 0 -k 1 -k 2
+3
+createNode anchorNode
+setAttr anchorNode1.pos 0.06123274192 0.08530745655 1.073385239
+setAttr anchorNode1.scale 0.6000000238
+setAttr anchorNode1.obj -type "string" "C:/Users/Corey/Documents/GitHub/BuildIt/OBJ Files/door_small.obj"
+createNode anchorNode
+setAttr anchorNode2.pos -1.329662323 0.899795413 1.09722352
+setAttr anchorNode2.scale 0.5
+setAttr anchorNode2.obj -type "string" "C:/Users/Corey/Documents/GitHub/BuildIt/OBJ Files/windowsmall.obj"
+createNode anchorNode
+setAttr anchorNode3.pos 1.23593998 0.8622077703 1.10372901
+setAttr anchorNode3.scale 0.5
+setAttr anchorNode3.obj -type "string" "C:/Users/Corey/Documents/GitHub/BuildIt/OBJ Files/windowsmall.obj"
